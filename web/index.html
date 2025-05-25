@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能合约交互演示</title>
+    <script src="./node_modules/ethers/dist/ethers.umd.js"></script>
+    <script src="./node_modules/jquery/dist/jquery.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #555;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        input[type="text"], input[type="number"] {
+            width: 200px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .result {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>智能合约交互演示</h1>
+        
+        <!-- 钱包连接部分 -->
+        <div class="section">
+            <h3>🔗 钱包连接</h3>
+            <button id="connectWallet">连接 MetaMask</button>
+            <div id="walletStatus" class="status info" style="display: none;"></div>
+            <div id="accountInfo" style="display: none;">
+                <p><strong>账户地址:</strong> <span id="accountAddress"></span></p>
+                <p><strong>余额:</strong> <span id="accountBalance"></span> ETH</p>
+            </div>
+        </div>
+
+        <!-- 合约交互部分 -->
+        <div class="section">
+            <h3>📋 合约信息</h3>
+            <p><strong>合约地址:</strong> 0xd1CAeCffB9dd7Ab7f4DB7eBA8B17973C86768Da4</p>
+            <div id="contractStatus" class="status info">请先连接钱包</div>
+        </div>
+
+        <!-- 合约方法调用 -->
+        <div class="section">
+            <h3>🎯 合约方法调用</h3>
+            
+            <!-- Say Hi 方法 -->
+            <div style="margin-bottom: 20px;">
+                <h4>Say Hi (纯函数调用)</h4>
+                <button id="sayHiBtn" disabled>调用 sayHi()</button>
+                <div id="sayHiResult" class="result" style="display: none;"></div>
+            </div>
+
+            <!-- 设置信息方法 -->
+            <div style="margin-bottom: 20px;">
+                <h4>设置信息 (需要交易)</h4>
+                <input type="text" id="nameInput" placeholder="输入姓名" />
+                <input type="number" id="ageInput" placeholder="输入年龄" />
+                <button id="setInfoBtn" disabled>设置信息</button>
+                <div id="setInfoResult" class="result" style="display: none;"></div>
+            </div>
+
+            <!-- 获取信息方法 -->
+            <div style="margin-bottom: 20px;">
+                <h4>获取信息 (查询)</h4>
+                <button id="getInfoBtn" disabled>获取信息</button>
+                <div id="getInfoResult" class="result" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- 事件监听 -->
+        <div class="section">
+            <h3>📡 事件监听</h3>
+            <button id="listenEventsBtn" disabled>开始监听事件</button>
+            <button id="stopListeningBtn" disabled>停止监听</button>
+            <div id="eventLogs" style="margin-top: 10px;"></div>
+        </div>
+    </div>
+
+    <script>
+        // 合约ABI
+        const contractABI = [
+            {
+                "inputs": [
+                    {"internalType": "string", "name": "_name", "type": "string"},
+                    {"internalType": "uint256", "name": "_age", "type": "uint256"}
+                ],
+                "name": "setInfo",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "sayHi",
+                "outputs": [{"internalType": "string", "name": "", "type": "string"}],
+                "stateMutability": "pure",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "getInfo",
+                "outputs": [
+                    {"internalType": "string", "name": "", "type": "string"},
+                    {"internalType": "uint256", "name": "", "type": "uint256"}
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {"indexed": false, "internalType": "string", "name": "name", "type": "string"},
+                    {"indexed": false, "internalType": "uint256", "name": "age", "type": "uint256"}
+                ],
+                "name": "Instructor",
+                "type": "event"
+            }
+        ];
+
+        const contractAddress = "0xd1CAeCffB9dd7Ab7f4DB7eBA8B17973C86768Da4";
+        let provider;
+        let signer;
+        let contract;
+        let eventListener;
+
+        // 连接钱包
+        $('#connectWallet').click(async function() {
+            try {
+                if (typeof window.ethereum !== 'undefined') {
+                    // 请求连接钱包
+                    await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    
+                    // 创建provider和signer
+                    provider = new ethers.BrowserProvider(window.ethereum);
+                    signer = await provider.getSigner();
+                    
+                    // 获取账户信息
+                    const address = await signer.getAddress();
+                    const balance = await provider.getBalance(address);
+                    const balanceInEth = ethers.formatEther(balance);
+                    
+                    // 创建合约实例
+                    contract = new ethers.Contract(contractAddress, contractABI, signer);
+                    
+                    // 更新UI
+                    $('#walletStatus').removeClass('error').addClass('success').text('钱包连接成功！').show();
+                    $('#accountAddress').text(address);
+                    $('#accountBalance').text(parseFloat(balanceInEth).toFixed(4));
+                    $('#accountInfo').show();
+                    $('#contractStatus').removeClass('info').addClass('success').text('合约已连接，可以进行交互');
+                    
+                    // 启用按钮
+                    $('#sayHiBtn, #setInfoBtn, #getInfoBtn, #listenEventsBtn').prop('disabled', false);
+                    $('#connectWallet').text('钱包已连接').prop('disabled', true);
+                    
+                } else {
+                    $('#walletStatus').removeClass('success').addClass('error').text('请安装 MetaMask!').show();
+                }
+            } catch (error) {
+                console.error('连接钱包失败:', error);
+                $('#walletStatus').removeClass('success').addClass('error').text('连接钱包失败: ' + error.message).show();
+            }
+        });
+
+        // 调用 sayHi 方法
+        $('#sayHiBtn').click(async function() {
+            try {
+                const result = await contract.sayHi();
+                $('#sayHiResult').text('返回结果: ' + result).show();
+            } catch (error) {
+                console.error('调用 sayHi 失败:', error);
+                $('#sayHiResult').text('调用失败: ' + error.message).show();
+            }
+        });
+
+        // 设置信息
+        $('#setInfoBtn').click(async function() {
+            const name = $('#nameInput').val();
+            const age = $('#ageInput').val();
+            
+            if (!name || !age) {
+                $('#setInfoResult').text('请输入姓名和年龄').show();
+                return;
+            }
+
+            try {
+                $('#setInfoResult').text('交易提交中...').show();
+                const tx = await contract.setInfo(name, parseInt(age));
+                $('#setInfoResult').text('交易已提交，等待确认... 交易哈希: ' + tx.hash).show();
+                
+                const receipt = await tx.wait();
+                $('#setInfoResult').text('交易成功确认！区块号: ' + receipt.blockNumber).show();
+                
+                // 清空输入框
+                $('#nameInput, #ageInput').val('');
+                
+            } catch (error) {
+                console.error('设置信息失败:', error);
+                $('#setInfoResult').text('设置失败: ' + error.message).show();
+            }
+        });
+
+        // 获取信息
+        $('#getInfoBtn').click(async function() {
+            try {
+                const result = await contract.getInfo();
+                const name = result[0];
+                const age = result[1].toString();
+                $('#getInfoResult').text('姓名: ' + name + ', 年龄: ' + age).show();
+            } catch (error) {
+                console.error('获取信息失败:', error);
+                $('#getInfoResult').text('获取失败: ' + error.message).show();
+            }
+        });
+
+        // 监听事件
+        $('#listenEventsBtn').click(function() {
+            if (contract) {
+                eventListener = contract.on("Instructor", (name, age, event) => {
+                    const eventInfo = `
+                        <div class="status success" style="margin: 5px 0;">
+                            <strong>事件触发:</strong> 姓名: ${name}, 年龄: ${age.toString()}<br>
+                            <small>区块号: ${event.log.blockNumber}, 交易哈希: ${event.log.transactionHash}</small>
+                        </div>
+                    `;
+                    $('#eventLogs').prepend(eventInfo);
+                });
+                
+                $('#listenEventsBtn').prop('disabled', true);
+                $('#stopListeningBtn').prop('disabled', false);
+                $('#eventLogs').prepend('<div class="status info">开始监听 Instructor 事件...</div>');
+            }
+        });
+
+        // 停止监听事件
+        $('#stopListeningBtn').click(function() {
+            if (contract && eventListener) {
+                contract.off("Instructor", eventListener);
+                $('#listenEventsBtn').prop('disabled', false);
+                $('#stopListeningBtn').prop('disabled', true);
+                $('#eventLogs').prepend('<div class="status info">已停止监听事件</div>');
+            }
+        });
+
+        // 监听账户变化
+        if (typeof window.ethereum !== 'undefined') {
+            window.ethereum.on('accountsChanged', function (accounts) {
+                if (accounts.length === 0) {
+                    location.reload(); // 重新加载页面
+                } else {
+                    location.reload(); // 账户变化时重新加载
+                }
+            });
+
+            window.ethereum.on('chainChanged', function (chainId) {
+                location.reload(); // 网络变化时重新加载
+            });
+        }
+    </script>
+</body>
+</html>
