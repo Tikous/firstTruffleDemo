@@ -196,19 +196,48 @@
         let signer;
         let contract;
         let eventListener;
+        let isConnected = false;
 
-        // 连接钱包
-        $('#connectWallet').click(async function() {
+        // 重置UI状态
+        function resetUI() {
+            $('#walletStatus').hide();
+            $('#accountInfo').hide();
+            $('#contractStatus').removeClass('success').addClass('info').text('请先连接钱包');
+            $('#sayHiBtn, #setInfoBtn, #getInfoBtn, #listenEventsBtn').prop('disabled', true);
+            $('#connectWallet').text('连接 MetaMask').prop('disabled', false);
+            $('#stopListeningBtn').prop('disabled', true);
+            isConnected = false;
+            
+            // 清空结果显示
+            $('#sayHiResult, #setInfoResult, #getInfoResult').hide();
+            $('#eventLogs').empty();
+            
+            // 停止事件监听
+            if (contract && eventListener) {
+                contract.off("Instructor", eventListener);
+                eventListener = null;
+            }
+        }
+
+        // 连接钱包函数
+        async function connectWallet() {
             try {
                 if (typeof window.ethereum !== 'undefined') {
-                    // 请求连接钱包
-                    await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    // 强制请求账户访问权限
+                    const accounts = await window.ethereum.request({ 
+                        method: 'eth_requestAccounts' 
+                    });
                     
-                    // 创建provider和signer
+                    if (accounts.length === 0) {
+                        throw new Error('没有可用的账户');
+                    }
+                    
+                    // 重新创建provider和signer以获取最新账户
                     provider = new ethers.BrowserProvider(window.ethereum);
+                    await provider.send("eth_requestAccounts", []);
                     signer = await provider.getSigner();
                     
-                    // 获取账户信息
+                    // 获取当前账户信息
                     const address = await signer.getAddress();
                     const balance = await provider.getBalance(address);
                     const balanceInEth = ethers.formatEther(balance);
@@ -225,7 +254,11 @@
                     
                     // 启用按钮
                     $('#sayHiBtn, #setInfoBtn, #getInfoBtn, #listenEventsBtn').prop('disabled', false);
-                    $('#connectWallet').text('钱包已连接').prop('disabled', true);
+                    $('#connectWallet').text('重新连接钱包').prop('disabled', false);
+                    
+                    isConnected = true;
+                    
+                    console.log('钱包连接成功，当前账户:', address);
                     
                 } else {
                     $('#walletStatus').removeClass('success').addClass('error').text('请安装 MetaMask!').show();
@@ -233,8 +266,34 @@
             } catch (error) {
                 console.error('连接钱包失败:', error);
                 $('#walletStatus').removeClass('success').addClass('error').text('连接钱包失败: ' + error.message).show();
+                resetUI();
             }
-        });
+        }
+
+        // 处理账户变化
+        async function handleAccountsChanged(accounts) {
+            console.log('账户发生变化:', accounts);
+            
+            if (accounts.length === 0) {
+                // 用户断开了钱包连接
+                $('#walletStatus').removeClass('success').addClass('error').text('钱包已断开连接').show();
+                resetUI();
+            } else if (isConnected) {
+                // 账户切换了，重新连接
+                $('#walletStatus').removeClass('error success').addClass('info').text('检测到账户变化，正在重新连接...').show();
+                await connectWallet();
+            }
+        }
+
+        // 处理网络变化
+        function handleChainChanged(chainId) {
+            console.log('网络发生变化:', chainId);
+            $('#walletStatus').removeClass('error success').addClass('info').text('检测到网络变化，请重新连接钱包').show();
+            resetUI();
+        }
+
+        // 连接钱包按钮点击事件
+        $('#connectWallet').click(connectWallet);
 
         // 调用 sayHi 方法
         $('#sayHiBtn').click(async function() {
@@ -316,20 +375,25 @@
             }
         });
 
-        // 监听账户变化
-        if (typeof window.ethereum !== 'undefined') {
-            window.ethereum.on('accountsChanged', function (accounts) {
-                if (accounts.length === 0) {
-                    location.reload(); // 重新加载页面
-                } else {
-                    location.reload(); // 账户变化时重新加载
-                }
-            });
-
-            window.ethereum.on('chainChanged', function (chainId) {
-                location.reload(); // 网络变化时重新加载
-            });
-        }
+        // 页面加载时设置事件监听
+        $(document).ready(function() {
+            // 监听账户变化
+            if (typeof window.ethereum !== 'undefined') {
+                window.ethereum.on('accountsChanged', handleAccountsChanged);
+                window.ethereum.on('chainChanged', handleChainChanged);
+                
+                // 检查是否已经连接
+                window.ethereum.request({ method: 'eth_accounts' })
+                    .then(accounts => {
+                        if (accounts.length > 0) {
+                            console.log('检测到已连接的账户:', accounts[0]);
+                            // 可以选择自动连接或显示提示
+                            $('#walletStatus').addClass('info').text('检测到已连接的钱包，点击"连接 MetaMask"刷新连接').show();
+                        }
+                    })
+                    .catch(console.error);
+            }
+        });
     </script>
 </body>
 </html>
